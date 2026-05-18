@@ -1,0 +1,6 @@
+# CARLA 端到端强化学习依赖
+numpy>=1.21.0
+opencv-python>=4.5.0
+torch>=1.12.0
+gymnasium>=0.28.0
+carla # 需要从CARLA PythonAPI手动安装，或者参见说明
