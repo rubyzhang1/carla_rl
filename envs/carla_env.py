@@ -90,6 +90,10 @@ class CarlaEndToEndEnv(gym.Env):
         # 低速停车检测
         self.low_speed_steps = 0
 
+        # 轨迹规划参数
+        self.num_waypoints = config.get('num_waypoints', 6)
+        self.waypoint_interval = config.get('waypoint_interval', 2.0)
+
     def connect(self):
         """连接到CARLA服务器"""
         try:
@@ -348,7 +352,9 @@ class CarlaEndToEndEnv(gym.Env):
         info = {
             'collided': self.collided,
             'speed': self._get_speed(),
-            'distance_to_target': self._get_distance_to_destination()
+            'distance_to_target': self._get_distance_to_destination(),
+            'ego_state': self._get_ego_state(),
+            'gt_waypoints': self.get_future_waypoints(),
         }
 
         return obs, reward, done, False, info
@@ -359,6 +365,66 @@ class CarlaEndToEndEnv(gym.Env):
             return 0.0
         v = self.vehicle.get_velocity()
         return np.sqrt(v.x**2 + v.y**2 + v.z**2)
+
+    def _get_ego_state(self):
+        """获取自车状态: [speed, vx_ego, vy_ego]"""
+        if self.vehicle is None:
+            return np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        velocity = self.vehicle.get_velocity()
+        speed = np.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
+        transform = self.vehicle.get_transform()
+        yaw = np.deg2rad(transform.rotation.yaw)
+        vx = velocity.x * np.cos(-yaw) - velocity.y * np.sin(-yaw)
+        vy = velocity.x * np.sin(-yaw) + velocity.y * np.cos(-yaw)
+        return np.array([speed, vx, vy], dtype=np.float32)
+
+    def get_future_waypoints(self, num_waypoints=None, interval=None):
+        """
+        获取车道跟随的未来轨迹真值（ego坐标系）
+
+        参数:
+            num_waypoints: waypoint数量，默认用config
+            interval: waypoint间距(米)，默认用config
+
+        返回:
+            np.array (num_waypoints, 2) ego-centric (dx, dy)
+        """
+        if num_waypoints is None:
+            num_waypoints = self.num_waypoints
+        if interval is None:
+            interval = self.waypoint_interval
+
+        if self.vehicle is None or self.map is None:
+            return np.zeros((num_waypoints, 2), dtype=np.float32)
+
+        current_transform = self.vehicle.get_transform()
+        current_loc = current_transform.location
+        current_yaw = np.deg2rad(current_transform.rotation.yaw)
+
+        current_wp = self.map.get_waypoint(current_loc, project_to_road=True)
+        if current_wp is None:
+            return np.zeros((num_waypoints, 2), dtype=np.float32)
+
+        waypoints_ego = []
+        wp = current_wp
+        for i in range(num_waypoints):
+            next_wps = wp.next(interval)
+            if len(next_wps) > 0:
+                wp = next_wps[0]
+                wp_loc = wp.transform.location
+                dx = wp_loc.x - current_loc.x
+                dy = wp_loc.y - current_loc.y
+                ego_x = dx * np.cos(-current_yaw) - dy * np.sin(-current_yaw)
+                ego_y = dx * np.sin(-current_yaw) + dy * np.cos(-current_yaw)
+                waypoints_ego.append([ego_x, ego_y])
+            else:
+                if waypoints_ego:
+                    last = waypoints_ego[-1]
+                    waypoints_ego.append([last[0] + interval, last[1]])
+                else:
+                    waypoints_ego.append([interval * (i + 1), 0.0])
+
+        return np.array(waypoints_ego, dtype=np.float32)
 
     def reset(self, seed=None, options=None):
         """Gym reset接口"""
@@ -384,7 +450,9 @@ class CarlaEndToEndEnv(gym.Env):
         obs = self.latest_image.copy()
         info = {
             'speed': self._get_speed(),
-            'distance_to_target': self._get_distance_to_destination()
+            'distance_to_target': self._get_distance_to_destination(),
+            'ego_state': self._get_ego_state(),
+            'gt_waypoints': self.get_future_waypoints(),
         }
 
         return obs, info
