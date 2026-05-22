@@ -103,7 +103,8 @@ TC_GRPO_CONFIG = {
 CONTROLLER_CONFIG = {
     'lookahead_distance': 3.0,
     'wheelbase': 2.5,
-    'target_speed': 5.0,
+    'max_speed': 30.0,
+    'min_speed': 3.0,
     'max_steering': 0.8,
     'speed_kp': 0.5,
     'min_throttle': 0.3,
@@ -112,12 +113,12 @@ CONTROLLER_CONFIG = {
 # RAD-2训练流水线配置
 RAD2_TRAIN_CONFIG = {
     # Phase 1: IL预训练Generator
-    'il_episodes': 500,
+    'il_episodes': 800,
     'il_lr': 1e-4,
     'il_batch_size': 32,
     'il_eval_interval': 50,
     # Phase 2: RL训练Discriminator
-    'rl_episodes': 800,
+    'rl_episodes': 1500,
     'rl_update_interval': 2048,
     # Phase 3: OGO在线微调Generator
     'ogo_enabled': True,

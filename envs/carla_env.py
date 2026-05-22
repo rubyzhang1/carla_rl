@@ -218,32 +218,45 @@ class CarlaEndToEndEnv(gym.Env):
         current_loc = self.vehicle.get_transform().location
         return current_loc.distance(self.destination)
 
-    def _apply_action(self, action):
-        """将动作应用到车辆控制"""
+    def _apply_action(self, action, raw_control=False):
+        """将动作应用到车辆控制
+
+        参数:
+            action: [steer, throttle, brake]
+            raw_control: True表示action已经是[steer, throttle[0,1], brake[0,1]]格式
+                         (如Pure Pursuit直接输出)，False则按PPO的[-1,1]格式转换
+        """
         steer = float(action[0])
-        # 模型输出在[-1, 1]，转换到[0, 1]
-        throttle = float((action[1] + 1) / 2)
-        brake = float((action[2] + 1) / 2)
+
+        if raw_control:
+            # Pure Pursuit直接输出，已在[0,1]范围
+            throttle = float(action[1])
+            brake = float(action[2])
+        else:
+            # PPO模型输出在[-1, 1]，转换到[0, 1]
+            throttle = float((action[1] + 1) / 2)
+            brake = float((action[2] + 1) / 2)
 
         # 限制范围
         steer = float(np.clip(steer, -1.0, 1.0))
         throttle = float(np.clip(throttle, 0.0, 1.0))
         brake = float(np.clip(brake, 0.0, 1.0))
 
-        # 测试时过滤小刹车：只有刹车 > 0.5才生效，更小的都清零
-        # 模型训练出来整体偏向刹车，测试时放宽让它开起来
-        if brake < 0.5:
-            brake = 0.0
+        if not raw_control:
+            # 以下逻辑仅对PPO模型生效（旧逻辑保持兼容）
+            # 测试时过滤小刹车：只有刹车 > 0.5才生效，更小的都清零
+            if brake < 0.5:
+                brake = 0.0
 
-        # 如果不刹车，保证最小油门，不让车慢慢停下
-        if brake == 0.0 and throttle < 0.4:
-            throttle = 0.4
+            # 如果不刹车，保证最小油门，不让车慢慢停下
+            if brake == 0.0 and throttle < 0.4:
+                throttle = 0.4
 
-        # 如果速度太低，自动给更大油门
-        if self.vehicle is not None:
-            speed = self._get_speed()
-            if speed < 5.0 and brake == 0.0:
-                throttle = 0.6
+            # 如果速度太低，自动给更大油门
+            if self.vehicle is not None:
+                speed = self._get_speed()
+                if speed < 5.0 and brake == 0.0:
+                    throttle = 0.6
 
         # 调试：输出动作（每100步一次，避免太多）
         if not hasattr(self, '_action_debug_counter'):
@@ -324,13 +337,16 @@ class CarlaEndToEndEnv(gym.Env):
         done = False
         return reward, done
 
-    def step(self, action):
+    def step(self, action, raw_control=False):
         """
         Gym step接口
+        参数:
+            action: [steer, throttle, brake]
+            raw_control: True则action已在[0,1]范围(Pure Pursuit直接输出)
         返回: observation, reward, terminated, truncated, info
         """
         # 应用动作
-        self._apply_action(action)
+        self._apply_action(action, raw_control=raw_control)
 
         # 推进CARLA世界仿真
         self.world.tick()

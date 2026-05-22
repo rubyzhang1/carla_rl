@@ -387,7 +387,7 @@ class TCGRPO:
 
     def load(self, path):
         """加载模型"""
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         self.shared_cnn.load_state_dict(checkpoint['shared_cnn_state_dict'])
         self.discriminator.load_state_dict(checkpoint['discriminator_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])

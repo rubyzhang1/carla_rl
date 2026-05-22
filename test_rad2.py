@@ -55,17 +55,18 @@ def evaluate(env, shared_cnn, generator, discriminator, controller,
 
             with torch.no_grad():
                 visual_feat, _ = shared_cnn(obs_tensor)
+                visual_feat = visual_feat.squeeze(0)
                 candidates = generator.generate(visual_feat, ego_tensor, N=5)
 
                 scores, _ = discriminator.score_candidates(
-                    visual_feat.unsqueeze(0), ego_tensor.unsqueeze(0), candidates
+                    visual_feat, ego_tensor, candidates
                 )
                 best_idx = scores.squeeze(0).argmax(dim=0).item()
                 selected_traj = candidates[0, best_idx].cpu().numpy()
 
             speed = info.get('speed', 0.0)
             action = controller.compute_control(selected_traj, speed)
-            next_obs, reward, done, _, info = env.step(action)
+            next_obs, reward, done, _, info = env.step(action, raw_control=True)
 
             if info.get('collided', False):
                 collision_count += 1
@@ -129,7 +130,7 @@ def main():
     controller = PurePursuitController(config['controller'])
 
     # 加载checkpoint
-    ckpt = torch.load(args.checkpoint, map_location=device)
+    ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
     shared_cnn.load_state_dict(ckpt['shared_cnn'])
     generator.load_state_dict(ckpt['generator'])
     if 'discriminator' in ckpt:

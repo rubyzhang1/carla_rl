@@ -104,6 +104,7 @@ def train_phase1(env, shared_cnn, generator, controller, config):
 
             with torch.no_grad():
                 visual_feat, _ = shared_cnn(obs_tensor)
+                visual_feat = visual_feat.squeeze(0)
 
             episode_data.append((visual_feat.cpu(), ego_tensor.cpu(), gt_tensor.cpu()))
 
@@ -113,7 +114,7 @@ def train_phase1(env, shared_cnn, generator, controller, config):
             selected_traj = candidates[0, 0].cpu().numpy()
             speed = info.get('speed', 0.0)
             action = controller.compute_control(selected_traj, speed)
-            next_obs, reward, done, _, info = env.step(action)
+            next_obs, reward, done, _, info = env.step(action, raw_control=True)
             obs = next_obs
             episode_steps += 1
 
@@ -206,6 +207,7 @@ def train_phase2(env, shared_cnn, generator, discriminator, controller, config,
 
             with torch.no_grad():
                 visual_feat, _ = shared_cnn(obs_tensor)
+                visual_feat = visual_feat.squeeze(0)
                 candidates = generator.generate(visual_feat, ego_tensor,
                                                  N=gen_config['num_candidates'])
 
@@ -216,7 +218,7 @@ def train_phase2(env, shared_cnn, generator, discriminator, controller, config,
             # 控制器执行
             speed = info.get('speed', 0.0)
             action = controller.compute_control(selected_traj, speed)
-            next_obs, reward, done, _, info = env.step(action)
+            next_obs, reward, done, _, info = env.step(action, raw_control=True)
 
             # 存储转换
             candidates_np = candidates[0].cpu().numpy()
@@ -315,6 +317,7 @@ def train_phase3(env, shared_cnn, generator, discriminator, controller, tc_grpo,
             ego_tensor = torch.tensor(ego_state, dtype=torch.float32).to(device)
 
             visual_feat, _ = shared_cnn(obs_tensor)
+            visual_feat = visual_feat.squeeze(0)
 
             with torch.no_grad():
                 candidates = generator.generate(visual_feat, ego_tensor,
@@ -327,7 +330,7 @@ def train_phase3(env, shared_cnn, generator, discriminator, controller, tc_grpo,
             # 控制器执行
             speed = info.get('speed', 0.0)
             action = controller.compute_control(selected_traj, speed)
-            next_obs, reward, done, _, info = env.step(action)
+            next_obs, reward, done, _, info = env.step(action, raw_control=True)
 
             # 存储到Discriminator buffer
             candidates_np = candidates[0].cpu().numpy()
@@ -425,7 +428,7 @@ def _ogo_update(shared_cnn, generator, discriminator, gen_optimizer,
     candidates_flat = candidates.reshape(B, N, -1)
     pairwise_dist = torch.cdist(candidates_flat, candidates_flat, p=2)
     # 排除自身距离
-    mask = ~torch.eye(N, dtype=torch.bool, device=device).unsqueeze(0)
+    mask = ~torch.eye(N, dtype=torch.bool, device=device).unsqueeze(0).expand(B, -1, -1)
     diversity_loss = -pairwise_dist[mask].mean()
 
     total_loss = gen_loss + lambda_div * diversity_loss
@@ -478,7 +481,7 @@ def main():
     tc_grpo = None
 
     if args.resume:
-        ckpt = torch.load(args.resume, map_location=device)
+        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
         shared_cnn.load_state_dict(ckpt['shared_cnn'])
         generator.load_state_dict(ckpt['generator'])
         if 'discriminator' in ckpt:

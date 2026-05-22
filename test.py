@@ -152,7 +152,7 @@ def test_model(checkpoint_path, num_episodes=5, render=True):
 def find_latest_checkpoint():
     """自动找到最新训练的最终模型"""
     import glob
-    checkpoint_root = 'checkpoints'
+    checkpoint_root = '/mnt/d/checkpoints'
     # 查找所有子文件夹，按修改时间排序
     dirs = [d for d in glob.glob(f"{checkpoint_root}/*") if os.path.isdir(d)]
     if not dirs:

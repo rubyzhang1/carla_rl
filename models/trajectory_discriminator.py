@@ -103,6 +103,11 @@ class TrajectoryDiscriminator(nn.Module):
         if trajectory.ndim == 3:
             trajectory = trajectory.reshape(trajectory.size(0), -1)
 
+        if visual_feat.ndim == 1:
+            visual_feat = visual_feat.unsqueeze(0)
+        if ego_state.ndim == 1:
+            ego_state = ego_state.unsqueeze(0)
+
         condition = self.encode_condition(visual_feat, ego_state)
         traj_embed = self.traj_encoder(trajectory)
 
@@ -127,6 +132,11 @@ class TrajectoryDiscriminator(nn.Module):
             scores: (B, N)
             values: (B,) 状态价值（只算一次）
         """
+        if visual_feat.ndim == 1:
+            visual_feat = visual_feat.unsqueeze(0)
+        if ego_state.ndim == 1:
+            ego_state = ego_state.unsqueeze(0)
+
         B, N = candidates.size(0), candidates.size(1)
 
         # 展平候选: (B*N, ...)

@@ -216,6 +216,7 @@ class TrajectoryGenerator(nn.Module):
 
         if visual_feat.ndim == 1:
             visual_feat = visual_feat.unsqueeze(0)
+        if ego_state.ndim == 1:
             ego_state = ego_state.unsqueeze(0)
 
         B = visual_feat.size(0)
